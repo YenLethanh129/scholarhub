@@ -1,0 +1,46 @@
+HELP.md
+ScholarHub/target/
+.mvn/wrapper/maven-wrapper.jar
+!**/src/main/**/target/
+!**/src/test/**/target/
+scholarhub-frontend/node_modules/
+scholarhub-backend/data/
+*/data/
+*.env
+
+### STS ###
+.apt_generated
+.classpath
+.factorypath
+.project
+.settings
+.springBeans
+.sts4-cache
+*.md
+
+### IntelliJ IDEA ###
+.idea
+*.iws
+*.iml
+*.ipr
+
+### NetBeans ###
+/nbproject/private/
+/nbbuild/
+/dist/
+/nbdist/
+/.nb-gradle/
+build/
+!**/src/main/**/build/
+!**/src/test/**/build/
+
+### VS Code ###
+.vscode/
+docker-compose.yml
+dev.application.properties
+/data
+
+*.config.ts
+*.env
+*/node_modules/
+*/docs/

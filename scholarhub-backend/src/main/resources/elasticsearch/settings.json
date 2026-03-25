@@ -1,0 +1,24 @@
+{
+  "analysis": {
+    "char_filter": {
+      "filename_char_filter": {
+        "type": "pattern_replace",
+        "pattern": "[_.-]",
+        "replacement": " "
+      }
+    },
+    "analyzer": {
+      "vietnamese_icu_analyzer": {
+        "type": "custom",
+        "char_filter": [
+          "filename_char_filter"
+        ],
+        "tokenizer": "icu_tokenizer",
+        "filter": [
+          "icu_folding",
+          "lowercase"
+        ]
+      }
+    }
+  }
+}

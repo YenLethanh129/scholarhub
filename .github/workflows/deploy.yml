@@ -1,0 +1,72 @@
+name: scholarhub CI/CD Pipeline
+
+on:
+  push:
+    branches: [ "main" ]
+
+jobs:
+  # ==============================================================
+  # JOB 1: CHẠY TRÊN MÁY CHỦ GITHUB (Lo việc nặng: Build & Đóng gói)
+  # ==============================================================
+  build-and-push:
+    runs-on: ubuntu-latest # <--- Sức mạnh của Cloud
+    steps:
+      - name: 1. Clone Code
+        uses: actions/checkout@v4
+
+      - name: 2. Setup Java 22
+        uses: actions/setup-java@v4
+        with:
+          java-version: '22'
+          distribution: 'temurin'
+          cache: maven
+
+      - name: 3. Build file JAR bằng Maven
+        run: |
+          cd scholarhub-backend
+          mvn clean package -DskipTests
+
+      - name: 4. Login vào Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
+
+      - name: 5. Build và Push Docker Image
+        run: |
+          cd scholarhub-backend
+          docker build -t ${{ secrets.DOCKER_USERNAME }}/scholarhub-backend:latest .
+          docker push ${{ secrets.DOCKER_USERNAME }}/scholarhub-backend:latest
+
+      - name: 6. Build file tĩnh cho Frontend (React Vite)
+        run: |
+          cd scholarhub-frontend
+          npm ci # Cài thư viện chuẩn xác theo package-lock.json
+          npm run build
+
+      - name: 7. Build và Push Frontend Docker Image (Giai đoạn Nginx)
+        run: |
+          cd scholarhub-frontend
+          docker build -t ${{ secrets.DOCKER_USERNAME }}/scholarhub-frontend:latest .
+          docker push ${{ secrets.DOCKER_USERNAME }}/scholarhub-frontend:latest
+
+  # ==============================================================
+  # JOB 2: CHẠY TRÊN MÁY ASUS TẠI NHÀ (Lo việc nhẹ: Bật Server)
+  # ==============================================================
+  deploy:
+    needs: build-and-push # Phải đợi Job 1 trên mây chạy xong mới được làm
+    runs-on: self-hosted  # <--- Điệp viên nhà trồng xuất trận!
+    steps:
+      - name: Deploy Backend trên Server Asus
+        run: |
+          # 1. Chui vào thư mục chứa cấu hình hạ tầng
+          cd /home/thanhyen/scholarhub
+          
+          # 2. Lôi bản cập nhật mới nhất từ Docker Hub về
+          docker compose pull backend frontend
+          
+          # 3. Khởi động lại mỗi thằng backend (Database vẫn sống nhăn răng)
+          docker compose up -d --no-deps backend
+          
+          # 4. Quét rác dọn dẹp ổ cứng
+          docker image prune -f

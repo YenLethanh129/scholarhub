@@ -1,0 +1,332 @@
+<!doctype html>
+<html lang="vi">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>scholarhub - Resumable Upload</title>
+    <style>
+      body {
+        font-family: Arial, sans-serif;
+        margin: 40px;
+        background-color: #f4f4f9;
+      }
+      .container {
+        max-width: 650px;
+        background: white;
+        padding: 20px;
+        border-radius: 8px;
+        box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+      }
+      button {
+        background: #007bff;
+        color: white;
+        border: none;
+        padding: 10px 15px;
+        cursor: pointer;
+        border-radius: 4px;
+        margin-top: 10px;
+        margin-right: 10px;
+        font-weight: bold;
+      }
+      button:disabled {
+        background: #ccc;
+        cursor: not-allowed;
+      }
+      #pauseBtn {
+        background: #dc3545;
+      }
+      #log {
+        background: #1e1e1e;
+        color: #0f0;
+        padding: 15px;
+        margin-top: 20px;
+        height: 300px;
+        overflow-y: auto;
+        font-family: monospace;
+        font-size: 13px;
+        border-radius: 4px;
+        line-height: 1.5;
+      }
+      .progress-bar {
+        width: 100%;
+        background-color: #e0e0e0;
+        border-radius: 4px;
+        margin-top: 15px;
+        overflow: hidden;
+        position: relative;
+      }
+      .progress {
+        width: 0%;
+        height: 24px;
+        background-color: #28a745;
+        transition: width 0.3s;
+      }
+      .progress-text {
+        position: absolute;
+        width: 100%;
+        text-align: center;
+        top: 3px;
+        color: #000;
+        font-size: 13px;
+        font-weight: bold;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <h2>Nghiệm thu API Resumable Upload</h2>
+      <p style="font-size: 14px; color: #555">
+        Thử nghiệm: Đang upload giữa chừng hãy bấm <b>F5 (Tải lại trang)</b>,
+        sau đó chọn lại đúng file đó để xem điều kỳ diệu!
+      </p>
+
+      <input type="file" id="fileInput" />
+      <br />
+      <button id="uploadBtn" onclick="startUpload()">
+        Bắt đầu / Tiếp tục Upload
+      </button>
+
+      <div class="progress-bar">
+        <div class="progress" id="progressBar"></div>
+        <div class="progress-text" id="progressText">0%</div>
+      </div>
+
+      <div id="log">Chờ lệnh...<br /></div>
+    </div>
+
+    <script>
+      // ================= CẤU HÌNH =================
+      const BASE_URL = "http://localhost:8080/api/v1/materials";
+      // Chú ý: Cập nhật Token mới nếu Token cũ hết hạn
+      const TOKEN =
+        "Bearer eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJrbWFfc3R1ZGVudCIsImlkIjoiMWIzNTBiOGYtNDA1NS00NTI3LTk4ZGMtMzNmODI5MDg4NzhmIiwicm9sZSI6IlNUVURFTlQiLCJpYXQiOjE3NzIxNzg0MzQsImV4cCI6MTc3MjI2NDgzNH0.cGvas7nzIzzV6REyygXKnejgUMwQKeRUsgjSsp_ENgI";
+      const CHUNK_SIZE = 5 * 1024 * 1024; // 5MB
+      // ============================================
+
+      function log(msg) {
+        const logDiv = document.getElementById("log");
+        logDiv.innerHTML += msg + "<br>";
+        logDiv.scrollTop = logDiv.scrollHeight;
+      }
+
+      function updateProgress(percent) {
+        document.getElementById("progressBar").style.width = percent + "%";
+        document.getElementById("progressText").innerText = percent + "%";
+      }
+
+      async function startUpload() {
+        const fileInput = document.getElementById("fileInput");
+        const file = fileInput.files[0];
+        const btn = document.getElementById("uploadBtn");
+
+        if (!file) {
+          alert("Vui lòng chọn 1 file video/ảnh to to một chút!");
+          return;
+        }
+
+        btn.disabled = true;
+        updateProgress(0);
+
+        // Dùng Tên + Kích thước file làm "Chìa khóa" để tìm trong LocalStorage
+        const fileCacheKey = `upload_session_${file.name}_${file.size}`;
+        let uploadId = null;
+        let objectKey = null;
+        let uploadedParts = [];
+
+        log(`\n================================`);
+        log(
+          `[BẮT ĐẦU] File: ${file.name} (${(file.size / 1024 / 1024).toFixed(2)} MB)`,
+        );
+
+        try {
+          const totalParts = Math.ceil(file.size / CHUNK_SIZE);
+          log(`- Tổng số mảnh cần upload: ${totalParts} mảnh (mỗi mảnh ~5MB).`);
+
+          // =========================================================
+          // BƯỚC 1: KIỂM TRA XEM CÓ FILE ĐANG UP DỞ KHÔNG
+          // =========================================================
+          const savedSession = localStorage.getItem(fileCacheKey);
+          if (savedSession) {
+            const sessionData = JSON.parse(savedSession);
+            log(
+              `<span style="color: #f39c12;">[CHECK] Phát hiện file đã từng up. Đang hỏi MinIO xem tiến độ tới đâu...</span>`,
+            );
+
+            try {
+              const statusRes = await fetch(
+                `${BASE_URL}/upload-status?uploadId=${sessionData.uploadId}&objectKey=${sessionData.objectKey}`,
+                {
+                  headers: { Authorization: TOKEN },
+                },
+              );
+
+              if (statusRes.ok) {
+                const statusData = await statusRes.json();
+                uploadId = statusData.uploadId;
+                objectKey = statusData.objectKey;
+                uploadedParts = statusData.uploadedParts || [];
+                log(
+                  `<span style="color: #00ff00;">-> MinIO xác nhận: Đã up thành công ${uploadedParts.length}/${totalParts} mảnh. Tải tiếp thôi!</span>`,
+                );
+              } else {
+                log(
+                  `<span style="color: #ff4444;">-> Phiên cũ đã bị xóa hoặc hết hạn. Sẽ tạo phiên upload mới.</span>`,
+                );
+                localStorage.removeItem(fileCacheKey);
+              }
+            } catch (e) {
+              log(
+                `<span style="color: #ff4444;">-> Lỗi khi check status. Sẽ tạo phiên upload mới.</span>`,
+              );
+              localStorage.removeItem(fileCacheKey);
+            }
+          }
+
+          // =========================================================
+          // BƯỚC 2: NẾU CHƯA CÓ PHIÊN (HOẶC PHIÊN CŨ ĐÃ CHẾT) -> INIT
+          // =========================================================
+          if (!uploadId) {
+            log("<b>[STEP 1] Tạo phiên Upload mới (Init Upload)...</b>");
+            const initRes = await fetch(`${BASE_URL}/init-upload`, {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+                Authorization: TOKEN,
+              },
+              body: JSON.stringify({
+                fileName: file.name,
+                fileSize: file.size,
+                contentType: file.type || "application/octet-stream",
+                folderID: null,
+              }),
+            });
+            if (!initRes.ok)
+              throw new Error("Lỗi Init Upload: " + (await initRes.text()));
+
+            const initData = await initRes.json();
+            uploadId = initData.uploadId;
+            objectKey = initData.objectKey;
+
+            // LƯU NGAY VÀO BỘ NHỚ TRÌNH DUYỆT ĐỂ LÁT ĐỨT MẠNG CÒN NHỚ
+            localStorage.setItem(
+              fileCacheKey,
+              JSON.stringify({ uploadId, objectKey }),
+            );
+            log(
+              `-> Khởi tạo thành công. UploadID: ${uploadId.substring(0, 10)}...`,
+            );
+          }
+
+          // =========================================================
+          // BƯỚC 3: LỌC RA NHỮNG MẢNH BỊ THIẾU
+          // =========================================================
+          const missingParts = [];
+          for (let i = 1; i <= totalParts; i++) {
+            // Tìm xem mảnh i đã có trong danh sách MinIO trả về chưa
+            const isUploaded = uploadedParts.find((p) => p.partNumber === i);
+            if (!isUploaded) missingParts.push(i);
+          }
+
+          let presignedUrls = {};
+          if (missingParts.length > 0) {
+            log(
+              `<b>[STEP 2.1] Xin link upload cho ${missingParts.length} mảnh còn thiếu...</b>`,
+            );
+            const paramParts = missingParts.join(",");
+            const urlRes = await fetch(
+              `${BASE_URL}/presigned-urls?uploadId=${uploadId}&objectKey=${objectKey}&partNumbers=${paramParts}`,
+              {
+                method: "GET",
+                headers: { Authorization: TOKEN },
+              },
+            );
+            if (!urlRes.ok)
+              throw new Error("Lỗi lấy URLs: " + (await urlRes.text()));
+            presignedUrls = await urlRes.json();
+          }
+
+          // =========================================================
+          // BƯỚC 4: BƠM DỮ LIỆU LÊN MINIO
+          // =========================================================
+          let successCount = uploadedParts.length;
+          updateProgress(Math.round((successCount / totalParts) * 100));
+
+          for (let i = 0; i < totalParts; i++) {
+            const partNumber = i + 1;
+
+            // KIỂM TRA: Mảnh này đã up trước đó chưa?
+            const existingPart = uploadedParts.find(
+              (p) => p.partNumber === partNumber,
+            );
+            if (existingPart) {
+              log(
+                `   <span style="color: #888;">-> [BỎ QUA] Mảnh ${partNumber}/${totalParts} (Đã có sẵn trên kho)</span>`,
+              );
+              continue; // Chuyển sang mảnh tiếp theo luôn, bỏ qua bước fetch
+            }
+
+            // NẾU CHƯA UP -> CẮT FILE VÀ UPLOAD
+            const start = i * CHUNK_SIZE;
+            const end = Math.min(start + CHUNK_SIZE, file.size);
+            const chunk = file.slice(start, end);
+
+            log(`   -> [ĐANG UP] Mảnh ${partNumber}/${totalParts}...`);
+            const uploadUrl = presignedUrls[partNumber];
+
+            const putRes = await fetch(uploadUrl, {
+              method: "PUT",
+              body: chunk,
+            });
+            if (!putRes.ok) throw new Error(`Lỗi up mảnh ${partNumber}`);
+
+            // Nhét ETag mới lấy được vào danh sách (để tý nữa gửi cho Complete)
+            const eTag = putRes.headers.get("ETag");
+            uploadedParts.push({ partNumber: partNumber, eTag: eTag });
+
+            successCount++;
+            updateProgress(Math.round((successCount / totalParts) * 100));
+          }
+
+          // =========================================================
+          // BƯỚC 5: HOÀN TẤT UPLOAD
+          // =========================================================
+          log("<b>[STEP 3] Đã có đủ các mảnh. Ráp file & lưu Database...</b>");
+
+          // QUAN TRỌNG: S3 yêu cầu danh sách Part khi Complete phải được sắp xếp tăng dần theo partNumber
+          uploadedParts.sort((a, b) => a.partNumber - b.partNumber);
+
+          const completeRes = await fetch(`${BASE_URL}/complete-upload`, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: TOKEN,
+            },
+            body: JSON.stringify({
+              uploadId: uploadId,
+              objectKey: objectKey,
+              title: "Video Bài Giảng Test HTML",
+              description: "Test qua HTML Vanilla",
+              parts: uploadedParts,
+            }),
+          });
+
+          if (!completeRes.ok)
+            throw new Error("Lỗi Complete: " + (await completeRes.text()));
+          const finalData = await completeRes.json();
+          log(
+            `<span style="color: #0ff; font-weight: bold;">[HOÀN TẤT] File đã nằm gọn trong hệ thống! Material ID: ${finalData.id}</span>`,
+          );
+
+          // Dọn dẹp LocalStorage vì file này đã up xong
+          localStorage.removeItem(fileCacheKey);
+        } catch (error) {
+          log(
+            `<span style="color: red; font-weight: bold;">[LỖI DỪNG LẠI] ${error.message}</span>`,
+          );
+        } finally {
+          btn.disabled = false;
+        }
+      }
+    </script>
+  </body>
+</html>
