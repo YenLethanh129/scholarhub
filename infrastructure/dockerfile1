@@ -1,0 +1,349 @@
+  GNU nano 7.2                                                                                                                                                                                                                                                                                                                                                                                                                                                                 docker-compose.yml
+services:
+  # 1. PostgreSQL (User, Role, Folder Structure)
+  postgres:
+    image: postgres:15-alpine
+    container_name: scholarhub_postgres
+    restart: always
+    environment:
+      POSTGRES_USER: user
+      POSTGRES_PASSWORD: password
+      POSTGRES_DB: multimedia_db
+    volumes:
+      # Data sẽ được lưu gọn gàng tại: infrastructure/data/postgresql
+      - ./data/postgresql:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    networks:
+      - scholarhub_network
+
+  # 2. MongoDB (Metadata - Technical Info)
+  mongodb:
+    image: mongo:6.0
+    container_name: scholarhub_mongodb
+    restart: always
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: user
+      MONGO_INITDB_ROOT_PASSWORD: password
+      MONGO_INITDB_DATABASE: multimedia_mongo_db
+    volumes:
+      - ./data/mongodb:/data/db
+    ports:
+      - "27018:27017"
+    networks:
+      - scholarhub_network
+
+  # 3. MinIO (Object Storage - Files)
+  minio:
+    image: minio/minio:latest
+    container_name: scholarhub_minio
+    restart: always
+    environment:
+      MINIO_ROOT_USER: user
+      MINIO_ROOT_PASSWORD: password
+    volumes:
+      - /mnt/hdd_data/minio:/data
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    command: server /data --console-address ":9001"
+    networks:
+      - scholarhub_network
+
+  # 4. Redis (Caching Layer)
+  redis:
+    image: redis:7-alpine
+    container_name: scholarhub_redis
+    restart: always
+    ports:
+      - "6379:6379"
+    volumes:
+      - ./data/redis:/data
+    networks:
+      - scholarhub_network
+
+  # 5. MinIO Setup (Tự động tạo Bucket)
+  createbuckets:
+    image: minio/mc:RELEASE.2024-01-13T08-44-48Z
+    container_name: scholarhub_minio_setup
+    depends_on:
+      - minio
+    networks:
+      - scholarhub_network
+    entrypoint:
+      - /bin/sh
+      - -c
+      - |
+        echo 'Waiting for MinIO to be ready...'
+        until mc alias set myminio http://minio:9000 user password; do
+          echo '... MinIO is initializing ...'
+          sleep 1
+        done
+        echo 'MinIO is UP! Creating bucket...'
+        mc mb myminio/learning-materials --ignore-existing
+        echo 'Setting policy to PRIVATE...'
+        mc anonymous set private myminio/learning-materials
+        echo 'Configuring Native Garbage Collector for Stale Uploads...'
+        mc admin config set myminio api stale_uploads_expiry=24h stale_uploads_cleanup_interval=6h
+        echo 'Restarting MinIO service...'
+        mc admin service restart myminio
+        echo 'MinIO Setup Complete!'
+        exit 0
+
+  # 6. Elasticsearch (Search Engine)
+  elasticsearch:
+    build:
+      context: ./elasticsearch # Đã khớp với thư mục infrastructure/elasticsearch
+    container_name: scholarhub_elasticsearch
+    restart: always
+    environment:
+      - discovery.type=single-node
+      - xpack.security.enabled=false
+      - "ES_JAVA_OPTS=-Xms512m -Xmx512m"
+    ports:
+      - "9200:9200"
+    volumes:
+      - es_data:/usr/share/elasticsearch/data
+    networks:
+      - scholarhub_network
+
+  # 7. Kibana (Giao diện quản lý Elastic)
+  kibana:
+    image: docker.elastic.co/kibana/kibana:8.12.0
+    container_name: scholarhub_kibana
+    environment:
+      # Trỏ đúng vào service elasticsearch cùng mạng
+      - ELASTICSEARCH_HOSTS=http://elasticsearch:9200
+    ports:
+      - "5601:5601"
+    depends_on:
+      - elasticsearch
+    networks:
+      - scholarhub_network
+
+  backend:
+    image: ${DOCKER_USERNAME}/scholarhub-backend:latest
+    container_name: scholarhub_backend
+    restart: always
+    ports:
+      - "8080:8080"
+    env_file:
+      - .env
+    depends_on:
+      - postgres
+      - mongodb
+      - redis
+      - elasticsearch
+    networks:
+      - scholarhub_network
+
+# ... (các service cũ của bạn như minio, elasticsearch giữ nguyên)
+
+  gotenberg:
+    image: gotenberg/gotenberg:8
+    container_name: scholarhub_gotenberg
+    ports:
+      - "3000:3000"
+    restart: unless-stopped
+    command:
+      - "gotenberg"
+      - "--api-timeout=60s" # 💡 Khuyên dùng: Tăng thời gian timeout lên 60s để phòng trường hợp file PowerPoint quá nặng
+    networks:
+      - scholarhub_network # Đổi tên này cho khớp với network bạn đang định nghĩa trong file compose
+
+# Khai báo Volume & Network độc lập
+volumes:
+  es_data:
+    driver: local
+
+networks:
+  scholarhub_network:
+    driver: bridge  
+
+
+
+
+
+
+
+                                                                                                                                                            docker-compose.yml
+version: '3.8'
+
+services:
+  # 1. Kẻ gác cổng (Nhận traffic từ yendev.top)
+  cloudflared:
+    image: cloudflare/cloudflared:latest
+    container_name: scholarhub_tunnel
+    restart: unless-stopped
+    command: tunnel run
+    environment:
+      - TUNNEL_TOKEN=eyJhIjoiYmI5NWZkY2Y3NTNiOWRjM2EwM2JiM2E1MDRmZjY0MjgiLCJ0IjoiZThhODkwNDQtZjQ1ZC00NWFkLTgzMDEtZGMxMWFiMTg2NDg0IiwicyI6Ik5HUmpZVE16WVdNdFpEVXpaUzAwT0dNNExXSm1Zamt0T1RBMFlXWm1NbUZpTm1SaSJ9
+    networks:
+      - scholarhub_network
+
+  # 2. Frontend (React Vite + Nginx)
+  frontend:
+    image: ${DOCKER_USERNAME}/scholarhub-frontend:latest
+    container_name: scholarhub_frontend
+    restart: always
+    ports:
+      - "80:80"
+    networks:
+      - scholarhub_network
+
+  # 3. Backend (Spring Boot)
+  backend: 
+    image: ${DOCKER_USERNAME}/scholarhub-backend:latest
+    container_name: scholarhub_backend
+    restart: always
+    ports:
+      - "8080:8080"
+    env_file:
+      - .env
+    environment:
+      - JAVA_TOOL_OPTIONS=-Xms256m -Xmx3069m
+    networks:
+      - scholarhub_network
+
+  postgres:
+    image: postgres:15-alpine
+    container_name: scholarhub_postgres
+    restart: always
+    environment:
+      POSTGRES_USER: user
+      POSTGRES_PASSWORD: password
+      POSTGRES_DB: multimedia_db
+    volumes:
+      # Data sẽ được lưu gọn gàng tại: infrastructure/data/postgresql
+      - ./data/postgresql:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    networks:
+      - scholarhub_network
+
+  # 2. MongoDB (Metadata - Technical Info)
+  mongodb:
+    image: mongo:6.0
+    container_name: scholarhub_mongodb
+    restart: always
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: user
+      MONGO_INITDB_ROOT_PASSWORD: password
+      MONGO_INITDB_DATABASE: multimedia_mongo_db
+    volumes:
+      - ./data/mongodb:/data/db
+    ports:
+      - "27018:27017"
+    networks:
+      - scholarhub_network
+
+  # 3. MinIO (Object Storage - Files)
+  minio:
+    image: minio/minio:latest
+    container_name: scholarhub_minio
+    restart: always
+    environment:
+      MINIO_ROOT_USER: user
+      MINIO_ROOT_PASSWORD: password
+    volumes:
+      - /mnt/hdd_data/minio:/data
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    command: server /data --console-address ":9001"
+    networks:
+      - scholarhub_network
+
+  # 4. Redis (Caching Layer)
+  redis:
+    image: redis:7-alpine
+    container_name: scholarhub_redis
+    restart: always
+    ports:
+      - "6379:6379"
+    volumes:
+      - ./data/redis:/data
+    networks:
+      - scholarhub_network
+
+  # 5. MinIO Setup (Tự động tạo Bucket)
+  createbuckets:
+    image: minio/mc:RELEASE.2024-01-13T08-44-48Z
+    container_name: scholarhub_minio_setup
+    depends_on:
+      - minio
+    networks:
+      - scholarhub_network
+    entrypoint:
+      - /bin/sh
+      - -c
+      - |
+        echo 'Waiting for MinIO to be ready...'
+        until mc alias set myminio http://minio:9000 user password; do
+          echo '... MinIO is initializing ...'
+          sleep 1
+        done
+        echo 'MinIO is UP! Creating bucket...'
+        mc mb myminio/learning-materials --ignore-existing
+        echo 'Setting policy to PRIVATE...'
+        mc anonymous set private myminio/learning-materials
+        echo 'Configuring Native Garbage Collector for Stale Uploads...'
+        mc admin config set myminio api stale_uploads_expiry=24h stale_uploads_cleanup_interval=6h
+        echo 'Restarting MinIO service...'
+        mc admin service restart myminio
+        echo 'MinIO Setup Complete!'
+        exit 0
+
+  # 6. Elasticsearch (Search Engine)
+  elasticsearch:
+    build:
+      context: ./elasticsearch # Đã khớp với thư mục infrastructure/elasticsearch
+    container_name: scholarhub_elasticsearch
+    restart: always
+    environment:
+      - discovery.type=single-node
+      - xpack.security.enabled=false
+      - "ES_JAVA_OPTS=-Xms512m -Xmx512m"
+    ports:
+      - "9200:9200"
+    volumes:
+      - es_data:/usr/share/elasticsearch/data
+    networks:
+      - scholarhub_network
+
+  # 7. Kibana (Giao diện quản lý Elastic)
+  kibana:
+    image: docker.elastic.co/kibana/kibana:8.12.0
+    container_name: scholarhub_kibana
+    environment:
+      # Trỏ đúng vào service elasticsearch cùng mạng
+      - ELASTICSEARCH_HOSTS=http://elasticsearch:9200
+    ports:
+      - "5601:5601"
+    depends_on:
+      - elasticsearch
+    networks:
+      - scholarhub_network
+
+
+  gotenberg:
+    image: gotenberg/gotenberg:8
+    container_name: scholarhub_gotenberg
+    ports:
+      - "3000:3000"
+    restart: unless-stopped
+    command:
+      - "gotenberg"
+      - "--api-timeout=60s" # 💡 Khuyên dùng: Tăng thời gian timeout lên 60s để phòng trường hợp file PowerPoint quá nặng
+    networks:
+      - scholarhub_network # Đổi tên này cho khớp với network bạn đang định nghĩa trong file compose
+
+# Khai báo Volume & Network độc lập
+volumes:
+  es_data:
+    driver: local
+
+
+networks:
+  scholarhub_network:
+    driver: bridge
