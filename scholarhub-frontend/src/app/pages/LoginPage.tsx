@@ -17,7 +17,11 @@ import {
   Email as EmailIcon,
   Lock as LockIcon,
 } from "@mui/icons-material";
-import { login, isTokenValid, verifySessionToken } from "../api/auth";
+import { AuthService } from "../services/AuthService";
+import { SessionService } from "../services/SessionService";
+
+const authService = new AuthService();
+const sessionService = new SessionService();
 
 export function LoginPage() {
   const navigate = useNavigate();
@@ -29,22 +33,23 @@ export function LoginPage() {
     password: "",
   });
 
-  // Kiểm tra JWT token hợp lệ khi mount - nếu còn hạn thì chuyển về /search
+  const redirectByRole = (userRole: string | undefined) => {
+    navigate(userRole === "ADMIN" ? "/admin/dashboard" : "/search");
+  };
+
   useEffect(() => {
     const checkSession = async () => {
-      // Thử kiểm tra token từ localStorage trước (nhanh)
-      const token = localStorage.getItem("JWT_TOKENT");
-      const userData = localStorage.getItem("user_data");
+      const token = sessionService.getStoredToken();
+      const userData = sessionService.getStoredUser();
 
-      if (token && userData && isTokenValid(token)) {
-        navigate("/search");
+      if (token && userData && authService.isTokenValid(token)) {
+        redirectByRole(userData.role);
         return;
       }
 
-      // Nếu không có token trong localStorage, gọi API để kiểm tra cookie
-      const sessionData = await verifySessionToken();
+      const sessionData = await authService.verifySession();
       if (sessionData) {
-        navigate("/search");
+        redirectByRole(sessionData.role);
       }
     };
 
@@ -63,15 +68,11 @@ export function LoginPage() {
     setSubmitting(true);
     try {
       
-      // Login API now returns user data with fullName and role
-      const userData = await login({
+      const userData = await authService.login({
         email: formData.email.trim(),
         password: formData.password,
       });
-      // User data is already saved in localStorage by login() function
-      // Navigate to search page
-      
-      navigate("/search");
+      redirectByRole(userData.role);
     } catch (err) {
       const errorMsg =
         err instanceof Error ? err.message : "Đăng nhập thất bại";

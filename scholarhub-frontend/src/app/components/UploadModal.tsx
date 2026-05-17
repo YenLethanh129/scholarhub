@@ -1,11 +1,6 @@
 import { useState, useCallback, useEffect } from "react";
+import { UploadService } from "../services/UploadService";
 import { toast } from "sonner";
-import {
-  initUpload,
-  getPresignedUrls,
-  completeUpload,
-  getUploadStatus,
-} from "../api/upload";
 import {
   Dialog,
   DialogTitle,
@@ -29,6 +24,8 @@ import {
   CheckCircle as CheckIcon,
   Delete as DeleteIcon,
 } from "@mui/icons-material";
+
+const uploadService = new UploadService();
 
 interface UploadFile {
   id: string;
@@ -137,7 +134,7 @@ export function UploadModal({
       if (savedSession) {
         const sessionData = JSON.parse(savedSession);
         try {
-          const statusData = await getUploadStatus(
+          const statusData = await uploadService.getStatus(
             sessionData.uploadId,
             sessionData.objectKey,
           );
@@ -150,12 +147,12 @@ export function UploadModal({
       }
 
       if (!uploadId) {
-        const initData = await initUpload(
-          file.name,
-          file.size,
-          file.type || "application/octet-stream",
-          currentFolderId || null,
-        );
+        const initData = await uploadService.initUpload({
+          fileName: file.name,
+          fileSize: file.size,
+          contentType: file.type || "application/octet-stream",
+          folderID: currentFolderId || null,
+        });
         uploadId = initData.uploadId;
         objectKey = initData.objectKey;
         localStorage.setItem(
@@ -173,7 +170,7 @@ export function UploadModal({
 
       let presignedUrls: Record<string, string> = {};
       if (missingParts.length > 0) {
-        presignedUrls = await getPresignedUrls(
+        presignedUrls = await uploadService.getPresignedUrls(
           uploadId!,
           objectKey!,
           missingParts,
@@ -220,13 +217,13 @@ export function UploadModal({
       }
 
       uploadedParts.sort((a, b) => a.partNumber - b.partNumber);
-      await completeUpload(
-        uploadId!,
-        objectKey!,
-        file.name,
-        "Uploaded via Explorer",
-        uploadedParts,
-      );
+      await uploadService.completeUpload({
+        uploadId: uploadId!,
+        objectKey: objectKey!,
+        title: file.name,
+        description: "Uploaded via Explorer",
+        parts: uploadedParts,
+      });
       localStorage.removeItem(fileCacheKey);
 
       // Update file to completed state

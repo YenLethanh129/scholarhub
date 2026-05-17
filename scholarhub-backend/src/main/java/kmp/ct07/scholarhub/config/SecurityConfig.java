@@ -86,9 +86,7 @@ public class SecurityConfig {
                                 contextPath + "/swagger-ui/**",
                                 contextPath + "/swagger-ui.html"
                         ).hasRole("ADMIN") // Chỉ ADMIN mới được truy cập Swagger UI
-
                         .requestMatchers( "/auth/**").permitAll()
-
                         .requestMatchers(HttpMethod.GET, "/materials/**").hasAnyRole("STUDENT", "TEACHER", "ADMIN")
                         .requestMatchers("/materials/**").hasAnyRole("TEACHER", "ADMIN")
                         .requestMatchers("/folders/**").hasAnyRole("TEACHER", "ADMIN")
