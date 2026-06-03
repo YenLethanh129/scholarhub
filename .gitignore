@@ -45,3 +45,4 @@ dev.application.properties
 */node_modules/
 */docs/
 *data.sql
+.codegraph
