@@ -11,7 +11,9 @@ import {
   Download as DownloadIcon,
   Error as ErrorIcon,
 } from "@mui/icons-material";
-import { getDownloadUrl } from "../api/materials";
+import { MaterialService } from "../services/MaterialService";
+
+const materialService = new MaterialService();
 
 interface FilePreviewProps {
   fileId: string;
@@ -126,7 +128,7 @@ export function FilePreview({
   const handleDownload = async () => {
     try {
       setDownloadLoading(true);
-      const dUrl = await getDownloadUrl(fileId);
+      const dUrl = await materialService.getDownloadUrl(fileId);
       if (dUrl) {
         window.open(dUrl, "_blank");
       }

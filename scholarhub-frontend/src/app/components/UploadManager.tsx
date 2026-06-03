@@ -20,14 +20,10 @@ import {
   ErrorOutline,
 } from "@mui/icons-material";
 import { toast } from "sonner";
-import {
-  initUpload,
-  getUploadStatus,
-  getPresignedUrls,
-  completeUpload,
-  type InitUploadRequest,
-  type CompleteUploadRequest,
-} from "../api/upload";
+import { UploadService } from "../services/UploadService";
+import type { InitUploadRequest, CompleteUploadRequest } from "../models/Upload";
+
+const uploadService = new UploadService();
 
 const CHUNK_SIZE = 5 * 1024 * 1024; // 5MB
 
@@ -126,7 +122,7 @@ export function UploadManager({
         if (savedSession && !uploadId) {
           const sessionData = JSON.parse(savedSession);
           try {
-            const statusData = await getUploadStatus(
+            const statusData = await uploadService.getStatus(
               sessionData.uploadId,
               sessionData.objectKey,
             );
@@ -146,7 +142,7 @@ export function UploadManager({
             contentType: file.type || "application/octet-stream",
             folderID: task.folderId || null,
           };
-          const initData = await initUpload(initReq);
+          const initData = await uploadService.initUpload(initReq);
           uploadId = initData.uploadId;
           objectKey = initData.objectKey;
           localStorage.setItem(
@@ -166,7 +162,7 @@ export function UploadManager({
         // Get presigned URLs for missing parts
         let presignedUrls: Record<number, string> = {};
         if (missingParts.length > 0) {
-          presignedUrls = await getPresignedUrls(
+          presignedUrls = await uploadService.getPresignedUrls(
             uploadId,
             objectKey,
             missingParts,
@@ -234,7 +230,7 @@ export function UploadManager({
           parts: uploadedParts,
         };
 
-        await completeUpload(completeReq);
+        await uploadService.completeUpload(completeReq);
 
         localStorage.removeItem(cacheKey);
 

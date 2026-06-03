@@ -10,6 +10,7 @@ import { BadRequestPage } from "./pages/BadRequestPage";
 import { ServerErrorPage } from "./pages/ServerErrorPage";
 import { ServiceUnavailablePage } from "./pages/ServiceUnavailablePage";
 import { RootLayout } from "./layouts/RootLayout";
+import { AdminDashboardPage } from "./pages/admin/AdminDashboardPage";
 
 export const router = createBrowserRouter([
   {
@@ -27,6 +28,12 @@ export const router = createBrowserRouter([
       { path: "error/500", Component: ServerErrorPage },
       { path: "error/503", Component: ServiceUnavailablePage },
       { path: "*", Component: NotFoundPage },
+    ],
+  },
+  {
+    path: "/admin",
+    children: [
+      { path: "dashboard", Component: AdminDashboardPage },
     ],
   },
 ]);

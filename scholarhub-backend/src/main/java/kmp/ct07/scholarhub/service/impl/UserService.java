@@ -44,7 +44,6 @@ public class UserService implements IUserService {
             throw new AppException(ErrorCode.EMAIL_ALREADY_REGISTERED);
         }
 
-        // 3. Tạo Entity User mới
         User newUser = User.builder()
                 .username(request.getUsername())
                 .email(request.getEmail())
@@ -53,7 +52,6 @@ public class UserService implements IUserService {
                 .password(passwordEncoder.encode(request.getPassword()))
                 .build();
 
-        // 4. Lưu xuống DB
         userRepository.save(newUser);
     }
 

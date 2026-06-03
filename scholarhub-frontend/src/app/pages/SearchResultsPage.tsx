@@ -35,10 +35,15 @@ import {
   Logout as LogoutIcon,
   MenuBook as LibraryIcon,
 } from "@mui/icons-material";
-import { logout } from "../api/auth";
-import { searchMaterials } from "../api/search";
-import { canAccessExplorer } from "../api/session";
-import type { MaterialDocument } from "../api/types";
+import { AuthService } from "../services/AuthService";
+import { SearchService } from "../services/SearchService";
+import { SessionService } from "../services/SessionService";
+import { SearchQuery } from "../models/SearchQuery";
+import type { MaterialDocument } from "../models/Material";
+
+const authService = new AuthService();
+const searchService = new SearchService();
+const sessionService = new SessionService();
 
 interface ResultRow {
   id: string;
@@ -257,7 +262,7 @@ export function SearchResultsPage() {
   const handleLogout = async () => {
     try {
       // BE sẽ set cookie trống (invalidate) qua `Set-Cookie`.
-      await logout();
+      await authService.logout();
     } finally {
       // Clear debounce timer on logout
       if (debounceTimer) {
@@ -305,7 +310,7 @@ export function SearchResultsPage() {
       setUsingMock(false);
       try {
         // keyword null/empty: không gửi query param → backend trả toàn bộ.
-        const docs = await searchMaterials({ keyword: qParam });
+        const docs = await searchService.search(new SearchQuery(qParam));
 
         if (cancelled) return;
         if (timeout) clearTimeout(timeout);
@@ -596,7 +601,7 @@ export function SearchResultsPage() {
               gap: { xs: 1, md: 2 },
             }}
           >
-            {canAccessExplorer() && (
+            {sessionService.canAccessExplorer() && (
               <Button
                 variant="text"
                 startIcon={<LibraryIcon />}
