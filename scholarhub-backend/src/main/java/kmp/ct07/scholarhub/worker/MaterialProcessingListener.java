@@ -40,18 +40,15 @@ public class MaterialProcessingListener {
 
             String extension = getExtension(event.objectKey());
 
-            // 2. Phân loại xử lý
             if (extension.matches("(doc|docx|xls|xlsx|ppt|pptx)")) {
                 log.info("👉 Phát hiện file Office, chuyển sang Gotenberg...");
                 processOfficeDocument(material, extension);
             }
             else {
-                // PDF, Image... Không cần convert, gốc = preview
                 material.setPreviewObjectName(material.getMinioObjectName());
                 material.setStatus(MaterialStatus.READY);
             }
 
-            // 3. Cập nhật trạng thái hoàn thành vào DB
             materialRepository.save(material);
             log.info("✅ Xử lý file hoàn tất, Status -> READY");
 

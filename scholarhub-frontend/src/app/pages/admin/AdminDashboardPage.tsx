@@ -50,11 +50,11 @@ export function AdminDashboardPage() {
   useEffect(() => {
     const storedUser = sessionService.getStoredUser();
     if (!storedUser) {
-      navigate("/admin/login");
+      navigate("/");
       return;
     }
     if (!storedUser.isAdmin) {
-      navigate("/admin/login");
+      navigate("/");
       return;
     }
     setUser(storedUser);
@@ -64,7 +64,7 @@ export function AdminDashboardPage() {
     try {
       await authService.logout();
     } finally {
-      navigate("/admin/login");
+      navigate("/");
     }
   };
 
