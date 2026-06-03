@@ -18,6 +18,8 @@ public enum ErrorCode {
     USERNAME_ALREADY_EXISTED(400, "Username đã tồn tại", HttpStatus.BAD_REQUEST),
     USER_NOT_FOUND(404, "Không tìm thấy người dùng", HttpStatus.NOT_FOUND),
 
+    ROLE_NOT_EXISTED(400, "Vai trò không tồn tại", HttpStatus.BAD_REQUEST),
+
     // MinIO Errors
     BUCKET_NOT_FOUND(404, "Không tìm thấy bucket lưu trữ", HttpStatus.NOT_FOUND),
     MINIO_UPLOAD_FAILED(500, "Lỗi khi upload file lên MinIO", HttpStatus.INTERNAL_SERVER_ERROR),

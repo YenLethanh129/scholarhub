@@ -16,6 +16,10 @@ import {
   Card,
   CardContent,
   Grid,
+  Select,
+  MenuItem,
+  FormControl,
+  InputLabel,
 } from "@mui/material";
 import {
   Logout as LogoutIcon,
@@ -45,6 +49,7 @@ export function AdminDashboardPage() {
     email: "",
     password: "",
     fullName: "",
+    role: "STUDENT",
   });
 
   useEffect(() => {
@@ -68,7 +73,7 @@ export function AdminDashboardPage() {
     }
   };
 
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement> | any) => {
     setFormData({ ...formData, [e.target.name]: e.target.value });
   };
 
@@ -94,10 +99,17 @@ export function AdminDashboardPage() {
 
     setSubmitting(true);
     try {
+      const payload = {
+        username: formData.username,
+        email: formData.email,
+        password: formData.password,
+        fullName: formData.fullName,
+        role: formData.role,
+      };
       const res = await fetch(`${apiConfig.getApiBase()}/auth/register`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(formData),
+        body: JSON.stringify(payload),
       });
 
       const text = await res.text();
@@ -112,7 +124,7 @@ export function AdminDashboardPage() {
 
       setSuccessMessage(body.message || "Đăng ký thành công! Vui lòng đăng nhập.");
       toast.success("Tạo tài khoản thành công!");
-      setFormData({ username: "", email: "", password: "", fullName: "" });
+      setFormData({ username: "", email: "", password: "", fullName: "", role: "STUDENT" });
     } catch (err) {
       const errorMsg = err instanceof Error ? err.message : "Đăng ký thất bại";
       setErrorMessage(errorMsg);
@@ -242,6 +254,21 @@ export function AdminDashboardPage() {
                       inputProps={{ minLength: 6 }}
                       helperText="Ít nhất 6 ký tự"
                     />
+                  </Grid>
+                  <Grid item xs={12} sm={6}>
+                    <FormControl fullWidth required>
+                      <InputLabel id="role-label">Vai trò</InputLabel>
+                      <Select
+                        labelId="role-label"
+                        name="role"
+                        value={formData.role}
+                        label="Vai trò"
+                        onChange={handleChange}
+                      >
+                        <MenuItem value="STUDENT">Học Sinh</MenuItem>
+                        <MenuItem value="TEACHER">Giáo Viên</MenuItem>
+                      </Select>
+                    </FormControl>
                   </Grid>
                   <Grid item xs={12}>
                     <Button
