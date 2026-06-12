@@ -134,7 +134,6 @@ Kubernetes deployment configs are documented in `config.md` (namespaces, Statefu
 ## Author
 
 **Student**: Lê Thanh Yên — CT07, Học Viện Kỹ Thuật Mật Mã  
-**Supervisor**: TS. Văn Thế Thành
 
 ## License
 
