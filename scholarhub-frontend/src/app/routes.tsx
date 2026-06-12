@@ -11,6 +11,7 @@ import { ServerErrorPage } from "./pages/ServerErrorPage";
 import { ServiceUnavailablePage } from "./pages/ServiceUnavailablePage";
 import { RootLayout } from "./layouts/RootLayout";
 import { AdminDashboardPage } from "./pages/admin/AdminDashboardPage";
+import { AdminLoginPage } from "./pages/admin/AdminLoginPage";
 
 export const router = createBrowserRouter([
   {
@@ -33,6 +34,7 @@ export const router = createBrowserRouter([
   {
     path: "/admin",
     children: [
+      { index: true, Component: AdminLoginPage },
       { path: "dashboard", Component: AdminDashboardPage },
     ],
   },
