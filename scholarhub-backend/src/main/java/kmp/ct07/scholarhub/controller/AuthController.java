@@ -39,13 +39,13 @@ public class AuthController {
 
         return ResponseEntity.ok()
                 .header(HttpHeaders.SET_COOKIE, cookie.toString())
-                .body(BaseResponse.<UserResponse>builder()
+                .body(BaseResponse.<Void>builder()
                         .message("Đăng nhập thành công!")
-                        .data(UserResponse.fromEntity(user))
+                        .data(null)
                         .build());
     }
 
-    @GetMapping("check")
+    @GetMapping("/check")
     public ResponseEntity<?> checkAuth(@AuthenticationPrincipal UserDetailsImpl currentUser) {
         if (currentUser == null) {
             return ResponseEntity.status(401)
@@ -57,9 +57,25 @@ public class AuthController {
         User user = userService.getByEmail(currentUser.getEmail());
 
         return ResponseEntity.ok()
-                .body(BaseResponse.<UserResponse>builder()
+                .body(BaseResponse.<Void>builder()
                         .message("Đã xác thực!")
-                        .data(UserResponse.fromEntity(user))
+                        .build());
+    }
+
+    @GetMapping("/me")
+    public ResponseEntity<?> getCurrentUser(@AuthenticationPrincipal UserDetailsImpl currentUser) {
+        if (currentUser == null) {
+            return ResponseEntity.status(401)
+                    .body(BaseResponse.<Void>builder()
+                            .message("Chưa xác thực!")
+                            .data(null)
+                            .build());
+        }
+        User user = userService.getByEmail(currentUser.getEmail());
+        return ResponseEntity.ok()
+                .body(BaseResponse.<String>builder()
+                        .message("Thông tin người dùng hiện tại!")
+                        .data(user.getRole().toString())
                         .build());
     }
 

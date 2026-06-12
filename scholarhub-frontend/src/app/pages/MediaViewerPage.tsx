@@ -26,13 +26,11 @@ import {
   Share as ShareIcon,
   Description as FileIcon,
 } from "@mui/icons-material";
-import {
-  getMaterialDetail,
-  getViewUrl,
-  updateMaterial,
-} from "../api/materials";
+import { MaterialService } from "../services/MaterialService";
 import { FilePreview } from "../components/FilePreview";
-import type { MaterialDetail } from "../api/materials";
+import type { Material } from "../models/Material";
+
+const materialService = new MaterialService();
 
 export function MediaViewerPage() {
   const { fileId } = useParams<{ fileId: string }>();
@@ -68,8 +66,8 @@ export function MediaViewerPage() {
       setError(null);
       try {
         const [detail, vUrl] = await Promise.all([
-          getMaterialDetail(fileId),
-          getViewUrl(fileId),
+          materialService.getDetail(fileId),
+          materialService.getViewUrl(fileId),
         ]);
         if (cancelled) return;
 
@@ -162,7 +160,7 @@ export function MediaViewerPage() {
 
     try {
       setEditLoading(true);
-      const updatedData = await updateMaterial(
+      const updatedData = await materialService.update(
         fileId,
         editTitle,
         editDescription || null,

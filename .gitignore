@@ -44,3 +44,5 @@ dev.application.properties
 *.env
 */node_modules/
 */docs/
+*data.sql
+.codegraph

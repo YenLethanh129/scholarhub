@@ -44,16 +44,18 @@ public class UserService implements IUserService {
             throw new AppException(ErrorCode.EMAIL_ALREADY_REGISTERED);
         }
 
-        // 3. Tạo Entity User mới
+        if (request.getRole().equals(UserRole.ADMIN) || request.getRole().equals(null)) {
+            throw new AppException(ErrorCode.ROLE_NOT_EXISTED);
+        }
+
         User newUser = User.builder()
                 .username(request.getUsername())
                 .email(request.getEmail())
                 .fullName(request.getFullName())
-                .role(UserRole.STUDENT) // Mặc định đăng ký là Sinh viên
+                .role(request.getRole()) // Mặc định đăng ký là Sinh viên
                 .password(passwordEncoder.encode(request.getPassword()))
                 .build();
 
-        // 4. Lưu xuống DB
         userRepository.save(newUser);
     }
 

@@ -1,14 +1,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { useNavigate, useLocation } from "react-router";
 import { toast } from "sonner";
-import {
-  getClipboardItem,
-  setClipboardItem,
-  clearClipboard,
-  hasClipboardItem,
-  isClipboardFile,
-  isClipboardFolder,
-} from "../utils/clipboard";
+import { ClipboardItem } from "../models/ClipboardItem";
 import {
   Box,
   AppBar,
@@ -59,20 +52,13 @@ import {
 } from "@mui/icons-material";
 import { UploadManager } from "../components/UploadManager";
 import { FolderItem, FileItem } from "../components/FolderTree";
-import {
-  getFolderTree,
-  getFolderContents,
-  createFolder,
-  deleteFolder,
-  moveFolder,
-} from "../api/folders";
-import {
-  moveMaterial,
-  updateMaterial,
-  getDownloadUrl,
-  deleteMaterial,
-} from "../api/materials";
-import { logout as apiLogout } from "../api/auth";
+import { FolderService } from "../services/FolderService";
+import { MaterialService } from "../services/MaterialService";
+import { AuthService } from "../services/AuthService";
+
+const folderService = new FolderService();
+const materialService = new MaterialService();
+const authService = new AuthService();
 
 const DRAWER_WIDTH = 280;
 
@@ -302,7 +288,7 @@ export function ExplorerPage() {
 
   const handleLogout = useCallback(async () => {
     try {
-      await apiLogout();
+      await authService.logout();
     } finally {
       localStorage.removeItem("scholar_hub_token");
       localStorage.removeItem("JWT_TOKENT");
@@ -357,7 +343,7 @@ export function ExplorerPage() {
     (async () => {
       setTreeLoading(true);
       try {
-        const tree = await getFolderTree();
+        const tree = await folderService.getTree();
         if (cancelled) return;
         setFolderTree(tree);
       } catch (e) {
@@ -382,7 +368,7 @@ export function ExplorerPage() {
     (async () => {
       setContentsLoading(true);
       try {
-        const { folders, files } = await getFolderContents(
+        const { folders, files } = await folderService.getContents(
           currentView.folderId,
         );
         if (cancelled) return;
@@ -473,7 +459,7 @@ export function ExplorerPage() {
       try {
         const parentId =
           currentView.folderId === "root" ? undefined : currentView.folderId;
-        await createFolder(name, parentId);
+        await folderService.create(name, parentId);
         toast.success("Scholar Hub thông báo: Thư mục đã tạo thành công!");
         setReloadTrigger((prev) => prev + 1);
       } catch (err) {
@@ -489,7 +475,7 @@ export function ExplorerPage() {
     const name = prompt(`Create folder inside '${folder.name}':`);
     if (name) {
       try {
-        await createFolder(name, folder.id);
+        await folderService.create(name, folder.id);
         toast.success("Scholar Hub thông báo: Thư mục đã tạo thành công!");
         setReloadTrigger((prev) => prev + 1);
       } catch (err) {
@@ -503,7 +489,7 @@ export function ExplorerPage() {
     const name = prompt("Create root folder name:");
     if (name) {
       try {
-        await createFolder(name, null);
+        await folderService.create(name, null);
         toast.success("Scholar Hub thông báo: Thư mục gốc đã tạo thành công!");
         setReloadTrigger((prev) => prev + 1);
       } catch (err) {
@@ -542,7 +528,7 @@ export function ExplorerPage() {
 
     try {
       if (deleteTarget.type === "folder") {
-        await deleteFolder(deleteTarget.id);
+        await folderService.delete(deleteTarget.id);
         toast.success(
           `Scholar Hub thông báo: Thư mục '${deleteTarget.name}' đã xóa thành công`,
           {
@@ -551,7 +537,7 @@ export function ExplorerPage() {
         );
         setReloadTrigger((prev) => prev + 1);
       } else {
-        await deleteMaterial(deleteTarget.id);
+        await materialService.delete(deleteTarget.id);
         toast.success(
           `Scholar Hub thông báo: Tệp '${deleteTarget.name}' đã xóa thành công`,
           {
@@ -584,7 +570,7 @@ export function ExplorerPage() {
     const folder = contextMenu.item as FolderItem;
 
     // Copy folder to clipboard
-    setClipboardItem(folder.id, folder.name, "folder", "move");
+    ClipboardItem.set(folder.id, folder.name, "folder", "move");
     toast.success(`Scholar Hub thông báo: '${folder.name}' đã sao chép`, {
       description: "Sẵn sàng để di chuyển - sử dụng Dán. Hết hạn trong 5 phút",
     });
@@ -592,7 +578,7 @@ export function ExplorerPage() {
   };
 
   const handlePasteFolder = async () => {
-    const clipboardItem = getClipboardItem();
+    const clipboardItem = ClipboardItem.getItem();
     if (!clipboardItem) {
       toast.error("Scholar Hub thông báo: Không có gì để dán");
       return;
@@ -607,8 +593,8 @@ export function ExplorerPage() {
     }
 
     try {
-      await moveFolder(clipboardItem.id, targetFolderId);
-      clearClipboard();
+      await folderService.move(clipboardItem.id, targetFolderId);
+      ClipboardItem.clear();
       toast.success(
         `Scholar Hub thông báo: '${clipboardItem.name}' đã di chuyển đến '${
           currentView.path[currentView.path.length - 1].name
@@ -617,10 +603,10 @@ export function ExplorerPage() {
 
       // Reload both folder tree and contents of current folder (same as handlePasteFile)
       try {
-        const tree = await getFolderTree();
+        const tree = await folderService.getTree();
         setFolderTree(tree);
 
-        const { folders, files } = await getFolderContents(targetFolderId);
+        const { folders, files } = await folderService.getContents(targetFolderId);
         setSubfolders(folders);
         setFiles(files);
       } catch (err) {
@@ -639,7 +625,7 @@ export function ExplorerPage() {
     const file = contextMenu.item as FileItem;
 
     // Copy file to clipboard
-    setClipboardItem(file.id, file.name, "file", "move");
+    ClipboardItem.set(file.id, file.name, "file", "move");
     toast.success(`Scholar Hub thông báo: '${file.name}' đã sao chép`, {
       description: "Sẵn sàng để di chuyển - sử dụng Dán. Hết hạn trong 5 phút",
     });
@@ -651,7 +637,7 @@ export function ExplorerPage() {
     const file = contextMenu.item as FileItem;
 
     try {
-      const downloadUrl = await getDownloadUrl(file.id);
+      const downloadUrl = await materialService.getDownloadUrl(file.id);
       // Create temporary link and trigger download
       const link = document.createElement("a");
       link.href = downloadUrl;
@@ -689,7 +675,7 @@ export function ExplorerPage() {
     if (!editingFile) return;
 
     try {
-      const updatedMaterial = await updateMaterial(
+      const updatedMaterial = await materialService.update(
         editingFile.id,
         editTitle,
         editDescription,
@@ -713,7 +699,7 @@ export function ExplorerPage() {
     if (!editingFile) return;
 
     try {
-      const updatedMaterial = await updateMaterial(
+      const updatedMaterial = await materialService.update(
         editingFile.id,
         renameValue,
         null,
@@ -734,7 +720,7 @@ export function ExplorerPage() {
   };
 
   const handlePasteFile = async () => {
-    const clipboardItem = getClipboardItem();
+    const clipboardItem = ClipboardItem.getItem();
     if (!clipboardItem) {
       toast.error("Nothing to paste");
       return;
@@ -743,19 +729,19 @@ export function ExplorerPage() {
     const targetFolderId = currentView.folderId;
 
     try {
-      if (isClipboardFile()) {
+      if (clipboardItem.itemType === "file") {
         // Move file to current folder
-        await moveMaterial(clipboardItem.id, targetFolderId);
-        clearClipboard();
+        await materialService.move(clipboardItem.id, targetFolderId);
+        ClipboardItem.clear();
         toast.success(
           `'${clipboardItem.name}' moved to '${
             currentView.path[currentView.path.length - 1].name
           }'`,
         );
-      } else if (isClipboardFolder()) {
+      } else if (clipboardItem.itemType === "folder") {
         // Move folder to current folder
-        await moveFolder(clipboardItem.id, targetFolderId);
-        clearClipboard();
+        await folderService.move(clipboardItem.id, targetFolderId);
+        ClipboardItem.clear();
         toast.success(
           `'${clipboardItem.name}' moved to '${
             currentView.path[currentView.path.length - 1].name
@@ -765,10 +751,10 @@ export function ExplorerPage() {
 
       // Reload both folder tree and contents of current folder
       try {
-        const tree = await getFolderTree();
+        const tree = await folderService.getTree();
         setFolderTree(tree);
 
-        const { folders, files } = await getFolderContents(targetFolderId);
+        const { folders, files } = await folderService.getContents(targetFolderId);
         setSubfolders(folders);
         setFiles(files);
       } catch (err) {
@@ -814,17 +800,17 @@ export function ExplorerPage() {
     }
 
     try {
-      await moveFolder(draggedFolder.id, targetFolder.id);
+      await folderService.move(draggedFolder.id, targetFolder.id);
       toast.success(`Moved '${draggedFolder.name}' to '${targetFolder.name}'`);
 
       // Reload folder tree and contents if moving to current folder
       try {
-        const tree = await getFolderTree();
+        const tree = await folderService.getTree();
         setFolderTree(tree);
 
         // If target folder is current folder, reload its contents
         if (targetFolder.id === currentView.folderId) {
-          const { folders, files } = await getFolderContents(targetFolder.id);
+          const { folders, files } = await folderService.getContents(targetFolder.id);
           setSubfolders(folders);
           setFiles(files);
         }
@@ -841,9 +827,9 @@ export function ExplorerPage() {
 
   const reloadData = useCallback(async () => {
     try {
-      const tree = await getFolderTree();
+      const tree = await folderService.getTree();
       setFolderTree(tree);
-      const { folders, files } = await getFolderContents(currentView.folderId);
+      const { folders, files } = await folderService.getContents(currentView.folderId);
       setSubfolders(folders);
       setFiles(files);
     } catch (err) {}
@@ -1315,7 +1301,7 @@ export function ExplorerPage() {
         ]}
 
         {contextMenu?.type === "background" &&
-          hasClipboardItem() && [
+          ClipboardItem.hasItem() && [
             <MenuItem key="bg-paste" onClick={handlePasteFile}>
               <ListItemIcon>
                 <PasteIcon fontSize="small" />
@@ -1335,7 +1321,7 @@ export function ExplorerPage() {
             </ListItemIcon>
             Di Chuyển
           </MenuItem>,
-          hasClipboardItem() && [
+          ClipboardItem.hasItem() && [
             <Divider key="c-paste-div" />,
             <MenuItem key="c-paste" onClick={handlePasteFile}>
               <ListItemIcon>
@@ -1370,7 +1356,7 @@ export function ExplorerPage() {
           <MenuItem key="cf-download" onClick={handleDownloadFile}>
             Tải Xuống
           </MenuItem>,
-          hasClipboardItem() && [
+          ClipboardItem.hasItem() && [
             <Divider key="cf-paste-div" />,
             <MenuItem key="cf-paste" onClick={handlePasteFile}>
               <ListItemIcon>
